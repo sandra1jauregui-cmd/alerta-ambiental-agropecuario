@@ -559,7 +559,6 @@ async function fetchGzip(url) {
 
 // Cargar capa corópleta de distritos
 fetchGzip(DISTRITOS_URL)
-  .then(data => data)
   .then(data => {
     distritosLayer = L.geoJSON(data, {
       style: styleDistrito,
@@ -620,7 +619,6 @@ function styleMM(feature) {
 // Inundaciones: también diferida (0.6s tras inicio)
 setTimeout(() => {
   fetchGzip(INUND_URL)
-    .then(r => r.json())
     .then(data => {
       inundData = data;
       inundLayer = L.geoJSON(data, {
@@ -637,7 +635,6 @@ setTimeout(() => {
 
 // Cargar oficinas
 fetchGzip(OFICINAS_URL)
-  .then(r => r.json())
   .then(data => {
     oficinasLayer = L.geoJSON(data, {
       pointToLayer: (feat, latlng) => {
@@ -688,7 +685,6 @@ fetchGzip(OFICINAS_URL)
 function cargarCapasDetalle() {
   // MM
   fetchGzip(MM_URL)
-    .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       mmData = data;
       mmLayer = L.geoJSON(data, {
@@ -704,7 +700,6 @@ function cargarCapasDetalle() {
 
   // Sequía
   fetchGzip(SEQUIA_URL)
-    .then(r => r.json())
     .then(data => {
       sequiaData = data;
       sequiaLayer = L.geoJSON(data, {
@@ -830,7 +825,7 @@ function evaluarPunto(lat, lng) {
 
   // Opción 2: sin cobertura CENEPRED MM → Bajo
   const mmNivel    = resultMM    ? resultMM.nivel    : 'Bajo';
-  const mmVal      = resultMM    ? resultMM.valor    : 2;
+  const mmVal      = resultMM    ? resultMM.valor    : 1;
   const mmFuente   = resultMM    ? 'polígono CENEPRED' : 'sin cobertura → Bajo';
 
   // Inundaciones: sin cobertura = sin dato
