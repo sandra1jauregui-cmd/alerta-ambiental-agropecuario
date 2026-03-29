@@ -845,18 +845,28 @@ function evaluarPunto(lat, lng) {
 }
 
 // ─── POINT-IN-POLYGON ─────────────────────────────────────────────────────────
-function pointInPolygon(point, polygon) {
-  // Ray casting algorithm
+function pointInRing(point, ring) {
+  // Ray casting algorithm — checks a single ring
   const [x, y] = point;
   let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [xi, yi] = polygon[i];
-    const [xj, yj] = polygon[j];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
     const intersect = ((yi > y) !== (yj > y)) &&
       (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+function pointInPolygonRings(point, rings) {
+  // GeoJSON Polygon: rings[0] = exterior, rings[1+] = holes
+  // Point is inside only if: inside exterior AND not inside any hole
+  if (!pointInRing(point, rings[0])) return false;
+  for (let h = 1; h < rings.length; h++) {
+    if (pointInRing(point, rings[h])) return false; // inside a hole
+  }
+  return true;
 }
 
 function queryLayer(geojsonData, point, nivelField, valorField) {
@@ -868,17 +878,17 @@ function queryLayer(geojsonData, point, nivelField, valorField) {
 
     let hit = false;
     if (geom.type === 'Polygon') {
-      hit = geom.coordinates.some(ring => pointInPolygon(point, ring));
+      hit = pointInPolygonRings(point, geom.coordinates);
     } else if (geom.type === 'MultiPolygon') {
       for (const poly of geom.coordinates) {
-        if (poly.some(ring => pointInPolygon(point, ring))) { hit = true; break; }
+        if (pointInPolygonRings(point, poly)) { hit = true; break; }
       }
     }
 
     if (hit) {
       return {
-        nivel: props[nivelField] || props.n_inund || props.N_SInunPP || props.N_SMMPP,
-        valor: props[valorField] || props.v_inund || props.V_SMMPP || props.peso,
+        nivel: props[nivelField],
+        valor: props[valorField],
       };
     }
   }
@@ -891,14 +901,15 @@ function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundV
   const res = document.getElementById('resultado');
   res.classList.add('visible');
 
-  // Normalizar valores al esquema 1-3 del modelo (Bajo=1, Medio=2, Alto/Muy alto=3)
+  // Normalizar valores al esquema 1-3 del modelo
+  // MM:    V_SMMPP  3=Alto→3pts, 4=Muy alto→3pts
+  // Inund: v_inund  2=Medio→2pts, 3=Alto→3pts
+  // Sequía: pts_sq ya viene 1/2/3 directo (no pasa por normalizar)
   function normalizar(val) {
-    if (!val) return 0;
-    if (val >= 5) return 3;
-    if (val >= 4) return 3;
-    if (val >= 3) return 2;
-    if (val >= 2) return 1;
-    return 1;
+    if (!val || val <= 0) return 1; // sin dato → Bajo
+    if (val >= 3) return 3;        // Alto / Muy alto
+    if (val >= 2) return 2;        // Medio
+    return 1;                      // Bajo
   }
 
   // MM: sin cobertura CENEPRED = Bajo (opción 2)
