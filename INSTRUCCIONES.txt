@@ -1,0 +1,27 @@
+====================================================
+  ALERTA AMBIENTAL AGROPECUARIO — Instrucciones
+====================================================
+
+OPCIÓN 1: Doble clic (más fácil)
+---------------------------------
+Ejecuta el archivo "iniciar_mapa.bat" (Windows) 
+o "iniciar_mapa.sh" (Mac/Linux)
+
+El mapa se abrirá automáticamente en tu navegador.
+
+OPCIÓN 2: Manual
+---------------------------------
+1. Abre una terminal / símbolo del sistema
+2. Navega a esta carpeta:
+   cd ruta/a/riesgo-app
+3. Ejecuta:
+   python3 -m http.server 8080
+   (o: python -m http.server 8080)
+4. Abre en tu navegador:
+   http://localhost:8080
+
+REQUISITO: Python 3 instalado
+(viene incluido en Mac y Linux;
+en Windows descárgalo de python.org)
+
+====================================================

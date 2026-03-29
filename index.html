@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alerta Ambiental Agropecuario — Los Andes</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f0f4f8;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      background: #1a3a5c;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    header .logo {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #6ec6f5;
+    }
+    header .title {
+      font-size: 15px;
+      font-weight: 500;
+      opacity: 0.9;
+    }
+    header .badge {
+      margin-left: auto;
+      background: #2e6da4;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* ─── LAYOUT ─── */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── SIDEBAR ─── */
+    .sidebar {
+      width: 340px;
+      flex-shrink: 0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.08);
+      z-index: 10;
+    }
+
+    .sidebar-section {
+      padding: 16px 18px;
+      border-bottom: 1px solid #e8edf2;
+    }
+    .sidebar-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #7a8a99;
+      margin-bottom: 12px;
+    }
+
+    /* Búsqueda por coordenadas */
+    .coord-form { display: flex; flex-direction: column; gap: 8px; }
+    .coord-row { display: flex; gap: 8px; }
+    .coord-row input {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 11px;
+      border: 1.5px solid #d0dae4;
+      border-radius: 7px;
+      font-size: 12px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      background: #f8fafc;
+    }
+    .coord-row input:focus {
+      outline: none;
+      border-color: #2e6da4;
+      background: #fff;
+    }
+    .coord-row input::placeholder { color: #aab4bd; }
+
+    .btn-evaluar {
+      padding: 10px;
+      background: #1a3a5c;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-family: inherit;
+    }
+    .btn-evaluar:hover { background: #2e6da4; }
+
+    .hint {
+      font-size: 11px;
+      color: #9aabb8;
+      text-align: center;
+    }
+
+    /* ─── RESULTADO ─── */
+    #resultado {
+      display: none;
+    }
+    #resultado.visible {
+      display: block;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #e8edf2;
+    }
+
+    .semaforo {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .semaforo.bajo    { background: #22c55e; }
+    .semaforo.medio   { background: #f59e0b; }
+    .semaforo.alto    { background: #ef4444; }
+    .semaforo.sin-dato { background: #94a3b8; }
+
+    .result-title { font-size: 13px; color: #7a8a99; font-weight: 500; }
+    .result-nivel { font-size: 20px; font-weight: 700; color: #1a3a5c; }
+    .result-score { font-size: 12px; color: #9aabb8; margin-top: 1px; }
+
+    /* Variables individuales */
+    .vars-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .var-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 18px;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .var-row:last-child { border-bottom: none; }
+    .var-name {
+      font-size: 13px;
+      color: #3a4a5a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .var-name .icon { font-size: 16px; }
+    .var-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 12px;
+      letter-spacing: 0.3px;
+    }
+    .tag-bajo      { background: #dcfce7; color: #15803d; }
+    .tag-medio     { background: #fef3c7; color: #92400e; }
+    .tag-alto      { background: #fee2e2; color: #991b1b; }
+    .tag-muyalto   { background: #fce7f3; color: #9d174d; }
+    .tag-sinriesgo { background: #f1f5f9; color: #475569; }
+    .tag-nodato    { background: #f1f5f9; color: #94a3b8; font-style: italic; }
+
+    .var-pts {
+      font-size: 12px;
+      color: #9aabb8;
+      min-width: 28px;
+      text-align: right;
+      font-weight: 500;
+    }
+
+    /* Score bar */
+    .score-section {
+      padding: 14px 18px;
+      border-bottom: 1px solid #e8edf2;
+    }
+    .score-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #7a8a99;
+      margin-bottom: 7px;
+    }
+    .score-label strong { color: #1a3a5c; font-size: 14px; }
+    .score-bar-bg {
+      background: #e8edf2;
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.5s ease;
+    }
+
+    /* Coordenadas del punto */
+    .coords-display {
+      font-size: 11px;
+      color: #9aabb8;
+      padding: 8px 18px 0;
+      font-family: monospace;
+    }
+
+    /* Oficinas */
+    .oficinas-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: #f0f7ff;
+      border-bottom: 1px solid #e8edf2;
+      cursor: pointer;
+      font-size: 12px;
+      color: #2e6da4;
+      font-weight: 600;
+    }
+    .oficinas-toggle input { cursor: pointer; }
+
+    /* Nota metodológica */
+    .nota {
+      padding: 12px 18px;
+      background: #f8fafc;
+      border-left: 3px solid #2e6da4;
+      margin: 0 18px 16px;
+      border-radius: 0 6px 6px 0;
+    }
+    .nota p {
+      font-size: 11px;
+      color: #7a8a99;
+      line-height: 1.5;
+    }
+    .nota strong { color: #3a4a5a; }
+
+    /* Leyenda */
+    .leyenda {
+      padding: 12px 18px;
+    }
+    .leyenda-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #3a4a5a;
+      margin-bottom: 5px;
+    }
+    .dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot.bajo  { background: #22c55e; }
+    .dot.medio { background: #f59e0b; }
+    .dot.alto  { background: #ef4444; }
+
+    /* ─── MAPA ─── */
+    #map {
+      flex: 1;
+      z-index: 1;
+    }
+
+    /* Loading overlay */
+    #loading {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(26,58,92,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      color: #fff;
+      gap: 16px;
+    }
+    #loading.hidden { display: none; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #6ec6f5;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 15px; opacity: 0.9; }
+
+    /* Tooltip en mapa */
+    .map-tooltip {
+      background: #1a3a5c;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      padding: 5px 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Pin del punto evaluado */
+    .pulse-marker {
+      width: 20px; height: 20px;
+      background: #1a3a5c;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(26,58,92,0.3);
+      animation: pulse 1.5s ease-out infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(26,58,92,0.4); }
+      70%  { box-shadow: 0 0 0 10px rgba(26,58,92,0); }
+      100% { box-shadow: 0 0 0 0 rgba(26,58,92,0); }
+    }
+
+    /* Mensaje sin datos / instrucción */
+    .msg-instruccion {
+      padding: 20px 18px;
+      text-align: center;
+      color: #9aabb8;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .msg-instruccion .big { font-size: 32px; margin-bottom: 8px; }
+
+    /* Status chip en mapa */
+    .layer-status {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(26,58,92,0.9);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      z-index: 500;
+      pointer-events: none;
+    }
+
+    @media (max-width: 700px) {
+      .sidebar { width: 100%; height: 45vh; }
+      .main { flex-direction: column; }
+      #map { height: 55vh; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">LA</div>
+  <div class="title">Alerta Ambiental Agropecuario</div>
+  <div class="badge">Cartera Agropecuaria</div>
+</header>
+
+<div class="main">
+  <!-- ═══ SIDEBAR ═══ -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>Evaluar predio</h3>
+      <div class="coord-form">
+        <div class="coord-row">
+          <input type="number" id="lat" placeholder="Latitud (ej. -9.1893)" step="any" />
+          <input type="number" id="lng" placeholder="Longitud (ej. -77.5240)" step="any" />
+        </div>
+        <button class="btn-evaluar" onclick="evaluarCoordenadas()">Evaluar ubicación</button>
+        <p class="hint">o haz clic directamente sobre el mapa</p>
+      </div>
+    </div>
+
+    <!-- RESULTADO (oculto hasta evaluar) -->
+    <div id="resultado">
+
+      <div class="result-header">
+        <div class="semaforo" id="sem-icon">🌿</div>
+        <div>
+          <div class="result-title">Riesgo ambiental agropecuario</div>
+          <div class="result-nivel" id="res-nivel">—</div>
+          <div class="result-score" id="res-score"></div>
+        </div>
+      </div>
+
+      <div class="coords-display" id="coords-display"></div>
+
+      <div class="score-section">
+        <div class="score-label">
+          <span>Puntaje total</span>
+          <strong id="score-num">—</strong>
+        </div>
+        <div class="score-bar-bg">
+          <div class="score-bar-fill" id="score-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="vars-grid" id="vars-grid"></div>
+
+      <div style="padding:14px 18px 4px">
+        <div class="nota">
+          <p><strong>Nota metodológica:</strong> El puntaje combina MM (huaycos), inundaciones y sequía a nivel polígono. Sequía según clasificación climática SENAMHI (Thornthwaite). Heladas agrícolas y pecuarias se incorporarán próximamente.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Instrucción inicial -->
+    <div id="instruccion" class="msg-instruccion">
+      <div class="big">📍</div>
+      <p>Haz clic en el mapa sobre el predio del cliente, o ingresa las coordenadas arriba para ver el nivel de riesgo ambiental.</p>
+    </div>
+
+    <!-- Leyenda -->
+    <div class="sidebar-section" style="margin-top:auto">
+      <h3>Leyenda</h3>
+      <div class="leyenda">
+        <div class="leyenda-item"><div class="dot bajo"></div> Riesgo Bajo (&lt;34% del máx)</div>
+        <div class="leyenda-item"><div class="dot medio"></div> Riesgo Medio (34–66%)</div>
+        <div class="leyenda-item"><div class="dot alto"></div> Riesgo Alto (&ge;67%)</div>
+      </div>
+      <div style="font-size:11px; color:#9aabb8; margin-top:8px; line-height:1.5">
+        Fuentes: CENEPRED · INEI · SENAMHI<br>
+        3 variables: MM · Inundaciones · Sequía<br>
+        Máx. 9 pts (3 vars × 3 pts c/u)
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ MAPA ═══ -->
+  <div id="map"></div>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p id="loading-msg">Cargando mapa...</p>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const INUND_URL     = 'data/inund_web.geojson';
+const MM_URL        = 'data/mm_web.geojson';
+const OFICINAS_URL  = 'data/oficinas.geojson';
+const DISTRITOS_URL = 'data/distritos_riesgo.geojson';
+const SEQUIA_URL    = 'data/sequia_web.geojson';
+
+// Colores por nivel
+const COLOR = {
+  'Bajo':      '#22c55e',
+  'Medio':     '#f59e0b',
+  'Alto':      '#ef4444',
+  'Muy alto':  '#be123c',
+  'Sin riesgo':'#94a3b8',
+};
+
+const NIVEL_MM = {
+  'Bajo': 1, 'Medio': 2, 'Alto': 3, 'Muy alto': 4,
+};
+const NIVEL_INU = {
+  'Bajo': 1, 'Medio': 2, 'Alto': 3, 'Muy alto': 4,
+};
+
+// ─── MAPA ─────────────────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [-9.5, -75.0],
+  zoom: 6,
+  zoomControl: false,
+});
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+// ─── DATOS ────────────────────────────────────────────────────────────────────
+let inundLayer = null, mmLayer = null, oficinasLayer = null, distritosLayer = null, sequiaLayer = null;
+let inundData  = null, mmData  = null, sequiaData = null;
+let markerActual = null;
+
+function styleDistrito(feature) {
+  const nivel = feature.properties.nivel_pp;
+  const fillColor = COLOR[nivel] || '#94a3b8';
+  return {
+    fillColor,
+    weight: 0.4,
+    opacity: 0.5,
+    color: '#fff',
+    fillOpacity: 0.55,
+  };
+}
+
+function styleDistritoHover(feature) {
+  return { weight: 1.5, color: '#1a3a5c', fillOpacity: 0.75 };
+}
+
+// Cargar capa corópleta de distritos
+fetch(DISTRITOS_URL)
+  .then(r => r.json())
+  .then(data => {
+    distritosLayer = L.geoJSON(data, {
+      style: styleDistrito,
+      onEachFeature: (feat, layer) => {
+        const p = feat.properties;
+        const inundLabel = p.inund_pp || 'Sin dato';
+        const seqLabel   = p.seq_pp   || 'Sin dato';
+        layer.bindTooltip(`
+          <div style="font-family:Inter,sans-serif;font-size:12px;min-width:170px">
+            <b style="color:#1a3a5c">${p.NOMBDIST}</b>
+            <div style="color:#555;font-size:11px">${p.NOMBPROV} · ${p.NOMBDEP}</div>
+            <hr style="margin:4px 0;border:none;border-top:1px solid #eee">
+            <div>MM: <b>${p.mm_pp}</b></div>
+            <div>Inundaciones: <b>${inundLabel}</b></div>
+            <div>Sequía: <b>${seqLabel}</b></div>
+            <div style="margin-top:3px">Score: <b>${p.score_pp} pts</b> &nbsp;•&nbsp; Nivel: <b style="color:${p.color}">${p.nivel_pp}</b></div>
+          </div>
+        `, { className: 'map-tooltip', sticky: true, opacity: 0.97 });
+        layer.on({
+          mouseover: e => { e.target.setStyle(styleDistritoHover(feat)); e.target.bringToFront(); },
+          mouseout:  e => { distritosLayer.resetStyle(e.target); },
+          click:     e => {
+            const c = feat.properties;
+            map.fitBounds(e.target.getBounds(), { maxZoom: 10 });
+          }
+        });
+      }
+    });
+    fase1Done(); // ← Distritos = Fase 1
+  })
+  .catch(e => {
+    console.warn('Distritos no cargados:', e);
+    fase1Done();
+  });
+
+function styleInund(feature) {
+  const nivel = feature.properties.n_inund || feature.properties.N_SInunPP;
+  return {
+    fillColor: COLOR[nivel] || '#94a3b8',
+    weight: 0.3,
+    opacity: 0.6,
+    color: '#fff',
+    fillOpacity: 0.45,
+  };
+}
+
+function styleMM(feature) {
+  const nivel = feature.properties.N_SMMPP || feature.properties.n_mm;
+  return {
+    fillColor: COLOR[nivel] || '#94a3b8',
+    weight: 0.2,
+    opacity: 0.4,
+    color: '#fff',
+    fillOpacity: 0.45,
+  };
+}
+
+// Inundaciones: también diferida (0.6s tras inicio)
+setTimeout(() => {
+  fetch(INUND_URL)
+    .then(r => r.json())
+    .then(data => {
+      inundData = data;
+      inundLayer = L.geoJSON(data, {
+        style: styleInund,
+        onEachFeature: (feat, layer) => {
+          const nivel = feat.properties.n_inund || feat.properties.N_SInunPP;
+          layer.bindTooltip(`<b>Inundaciones:</b> ${nivel}`, { className: 'map-tooltip', sticky: true });
+        }
+      }).addTo(map);
+      fase2Done();
+    })
+    .catch(e => { console.warn('Inundaciones no cargadas:', e); fase2Done(); });
+}, 600);
+
+// Cargar oficinas
+fetch(OFICINAS_URL)
+  .then(r => r.json())
+  .then(data => {
+    oficinasLayer = L.geoJSON(data, {
+      pointToLayer: (feat, latlng) => {
+        const nivel = feat.properties.nivel_pp;
+        const color = feat.properties.color || '#94a3b8';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="
+            width:28px;height:28px;
+            background:${color};
+            border:3px solid #fff;
+            border-radius:50%;
+            box-shadow:0 2px 6px rgba(0,0,0,0.35);
+            display:flex;align-items:center;justify-content:center;
+            font-size:12px;font-weight:700;color:#fff;
+            font-family:Inter,sans-serif;
+          ">${nivel === 'Sin dato' ? '?' : nivel[0]}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+        return L.marker(latlng, { icon });
+      },
+      onEachFeature: (feat, layer) => {
+        const p = feat.properties;
+        layer.bindPopup(`
+          <div style="font-family:Inter,sans-serif;min-width:200px">
+            <div style="font-weight:700;font-size:14px;color:#1a3a5c;margin-bottom:6px">🏢 ${p.nombre}</div>
+            <div style="font-size:12px;color:#555;margin-bottom:8px">${p.region} · ${p.departamento}</div>
+            <table style="font-size:12px;width:100%;border-collapse:collapse">
+              <tr><td style="padding:3px 0;color:#888">MM (${p.mm_fuente || 'polígono'})</td><td style="font-weight:600">${p.mm_pp}</td></tr>
+              <tr><td style="padding:3px 0;color:#888">Inundaciones (polígono)</td><td style="font-weight:600">${p.inund_pp || 'Sin dato'}</td></tr>
+              <tr><td style="padding:3px 0;color:#888">Sequía (climático)</td><td style="font-weight:600">${p.seq_pp || 'Sin dato'}</td></tr>
+              <tr style="border-top:1px solid #eee"><td style="padding:5px 0;color:#888">Score</td><td style="font-weight:700">${p.score_pp} pts (${p.n_vars} var)</td></tr>
+              <tr><td style="color:#888">Nivel PP</td><td style="font-weight:700;color:${p.color}">${p.nivel_pp}</td></tr>
+            </table>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#aaa">
+              Datos polígono: MM=${p.mm_pp} · Inu=${p.inund_pp || 'Sin dato'}
+            </div>
+          </div>
+        `, { maxWidth: 260 });
+      }
+    }).addTo(map);
+    fase1Done(); // ← Oficinas = Fase 1
+  })
+  .catch(e => { console.warn('Oficinas no cargadas:', e); fase1Done(); });
+
+// MM y Sequía: cargar en diferido después de que el mapa esté visible
+function cargarCapasDetalle() {
+  // MM
+  fetch(MM_URL)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      mmData = data;
+      mmLayer = L.geoJSON(data, {
+        style: styleMM,
+        onEachFeature: (feat, layer) => {
+          const nivel = feat.properties.N_SMMPP || feat.properties.n_mm;
+          layer.bindTooltip(`<b>Mov. de masas:</b> ${nivel}`, { className: 'map-tooltip', sticky: true });
+        }
+      }); // NO .addTo(map) — se añade al activar en control
+      fase2Done();
+    })
+    .catch(() => { fase2Done(); });
+
+  // Sequía
+  fetch(SEQUIA_URL)
+    .then(r => r.json())
+    .then(data => {
+      sequiaData = data;
+      sequiaLayer = L.geoJSON(data, {
+        style: feat => ({
+          fillColor: feat.properties.color_sq || '#94a3b8',
+          weight: 0.3, opacity: 0.5, color: '#fff', fillOpacity: 0.5,
+        }),
+        onEachFeature: (feat, layer) => {
+          const p = feat.properties;
+          layer.bindTooltip(
+            `<b>Sequía:</b> ${p.nivel_sq} <span style="color:#888">(${p.codigo})</span>`,
+            { className: 'map-tooltip', sticky: true }
+          );
+        }
+      }); // NO .addTo(map) — disponible para evaluaciones y control
+      fase2Done();
+    })
+    .catch(e => { console.warn('Sequía no cargada:', e); fase2Done(); });
+}
+
+// Iniciar carga diferida después de 1.5s (cuando el mapa ya es visible)
+setTimeout(cargarCapasDetalle, 1500);
+
+// ─── CARGA PROGRESIVA ─────────────────────────────────────────────────────────
+// Fase 1: oficinas + distritos → mapa visible inmediatamente
+// Fase 2: capas detalladas (inund, MM, sequía) → en segundo plano
+let fase1Count = 0;
+let fase2Count = 0;
+let layersControlAdded = false;
+let layersControl = null;
+
+function fase1Done() {
+  // Oficinas o distritos cargados
+  fase1Count++;
+  if (fase1Count >= 2) {
+    // Mostrar mapa inmediatamente
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('loading-msg').textContent = 'Cargando capas de riesgo...';
+    
+    // Ordenar capas
+    if (distritosLayer) { distritosLayer.remove(); distritosLayer.addTo(map); }
+    if (oficinasLayer)  { oficinasLayer.remove();  oficinasLayer.addTo(map); }
+    
+    // Crear control de capas con lo que hay
+    actualizarControlCapas();
+  }
+}
+
+function fase2Done() {
+  // Una capa detallada cargada (inund / MM / sequía)
+  fase2Count++;
+  
+  // Reordenar capas cada vez que llega una nueva
+  if (distritosLayer) { distritosLayer.remove(); distritosLayer.addTo(map); }
+  if (sequiaLayer)    { sequiaLayer.remove();    sequiaLayer.addTo(map); }
+  if (inundLayer)     { inundLayer.remove();     inundLayer.addTo(map); }
+  if (mmLayer)        { mmLayer.remove();        mmLayer.addTo(map); }
+  if (oficinasLayer)  { oficinasLayer.remove();  oficinasLayer.addTo(map); }
+  
+  actualizarControlCapas();
+}
+
+function actualizarControlCapas() {
+  // Quitar control anterior si existe
+  if (layersControl) { layersControl.remove(); layersControl = null; }
+  
+  const overlays = {};
+  if (distritosLayer) overlays['🗺️ Riesgo por distrito']     = distritosLayer;
+  if (sequiaLayer)    overlays['☀️ Sequía (climático)']       = sequiaLayer;
+  if (inundLayer)     overlays['🌊 Inundaciones (polígono)']  = inundLayer;
+  if (mmLayer)        overlays['⛰️ Mov. de masas (polígono)'] = mmLayer;
+  if (oficinasLayer)  overlays['🏢 Oficinas']                  = oficinasLayer;
+  
+  if (Object.keys(overlays).length > 0) {
+    layersControl = L.control.layers(null, overlays, { collapsed: false }).addTo(map);
+  }
+}
+
+// Alias para compatibilidad
+function checkAllLoaded() { fase1Done(); }
+
+// ─── CLICK EN MAPA ────────────────────────────────────────────────────────────
+map.on('click', function(e) {
+  const { lat, lng } = e.latlng;
+  document.getElementById('lat').value = lat.toFixed(5);
+  document.getElementById('lng').value = lng.toFixed(5);
+  evaluarPunto(lat, lng);
+});
+
+// ─── EVALUACIÓN ───────────────────────────────────────────────────────────────
+function evaluarCoordenadas() {
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lng = parseFloat(document.getElementById('lng').value);
+  if (isNaN(lat) || isNaN(lng)) {
+    alert('Por favor ingresa latitud y longitud válidas.');
+    return;
+  }
+  if (lat < -18.5 || lat > 0 || lng < -82 || lng > -68) {
+    alert('Las coordenadas parecen estar fuera de Perú. Verifica que estén en grados decimales (ej. lat: -9.18, lng: -77.52).');
+    return;
+  }
+  evaluarPunto(lat, lng);
+  map.setView([lat, lng], 12);
+}
+
+function evaluarPunto(lat, lng) {
+  // Mover/crear marcador
+  if (markerActual) map.removeLayer(markerActual);
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="pulse-marker"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+  markerActual = L.marker([lat, lng], { icon }).addTo(map);
+
+  // Point in polygon
+  const pt = [lng, lat]; // GeoJSON es [lon, lat]
+
+  const resultInund  = queryLayer(inundData,  pt, 'n_inund', 'v_inund');
+  const resultMM     = mmData     ? queryLayer(mmData,     pt, 'N_SMMPP', 'V_SMMPP')  : null;
+  const resultSequia = sequiaData ? queryLayer(sequiaData, pt, 'nivel_sq', 'pts_sq')  : null;
+
+  // Opción 2: sin cobertura CENEPRED MM → Bajo
+  const mmNivel    = resultMM    ? resultMM.nivel    : 'Bajo';
+  const mmVal      = resultMM    ? resultMM.valor    : 2;
+  const mmFuente   = resultMM    ? 'polígono CENEPRED' : 'sin cobertura → Bajo';
+
+  // Inundaciones: sin cobertura = sin dato
+  const inundNivel = resultInund ? resultInund.nivel : null;
+  const inundVal   = resultInund ? resultInund.valor : null;
+
+  // Sequía: sin cobertura climática = sin dato (zona sin clasificación agropecuaria)
+  const seqNivel   = resultSequia ? resultSequia.nivel : null;
+  const seqVal     = resultSequia ? resultSequia.valor : null;
+
+  mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundVal, seqNivel, seqVal);
+}
+
+// ─── POINT-IN-POLYGON ─────────────────────────────────────────────────────────
+function pointInPolygon(point, polygon) {
+  // Ray casting algorithm
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function queryLayer(geojsonData, point, nivelField, valorField) {
+  if (!geojsonData) return null;
+  for (const feature of geojsonData.features) {
+    const geom = feature.geometry;
+    const props = feature.properties;
+    if (!geom) continue;
+
+    let hit = false;
+    if (geom.type === 'Polygon') {
+      hit = geom.coordinates.some(ring => pointInPolygon(point, ring));
+    } else if (geom.type === 'MultiPolygon') {
+      for (const poly of geom.coordinates) {
+        if (poly.some(ring => pointInPolygon(point, ring))) { hit = true; break; }
+      }
+    }
+
+    if (hit) {
+      return {
+        nivel: props[nivelField] || props.n_inund || props.N_SInunPP || props.N_SMMPP,
+        valor: props[valorField] || props.v_inund || props.V_SMMPP || props.peso,
+      };
+    }
+  }
+  return null;  // fuera de cobertura
+}
+
+// ─── MOSTRAR RESULTADO ────────────────────────────────────────────────────────
+function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundVal, seqNivel, seqVal) {
+  document.getElementById('instruccion').style.display = 'none';
+  const res = document.getElementById('resultado');
+  res.classList.add('visible');
+
+  // Normalizar valores al esquema 1-3 del modelo (Bajo=1, Medio=2, Alto/Muy alto=3)
+  function normalizar(val) {
+    if (!val) return 0;
+    if (val >= 5) return 3;
+    if (val >= 4) return 3;
+    if (val >= 3) return 2;
+    if (val >= 2) return 1;
+    return 1;
+  }
+
+  // MM: sin cobertura CENEPRED = Bajo (opción 2)
+  const mmPts    = normalizar(mmVal);
+
+  // Inundaciones: sin cobertura = no suma
+  const inundPts = inundNivel ? normalizar(inundVal) : null;
+
+  // Sequía: usa pts_sq directo (ya viene 1/2/3); sin cobertura o 'Sin riesgo' = no suma
+  const seqPts   = (seqNivel && seqNivel !== 'Sin riesgo') ? (seqVal || 0) : null;
+
+  // Cuántas variables tienen dato
+  const nVars = 1
+    + (inundPts !== null ? 1 : 0)
+    + (seqPts   !== null ? 1 : 0);
+
+  // Score y máximo
+  let score    = mmPts
+    + (inundPts !== null ? inundPts : 0)
+    + (seqPts   !== null ? seqPts   : 0);
+  let maxScore = 3
+    + (inundPts !== null ? 3 : 0)
+    + (seqPts   !== null ? 3 : 0);
+
+  // Clasificación — umbrales proporcionales al 33%/67% del máximo
+  let nivelFinal, semClass, semIcon;
+  const pct = score / maxScore;
+  if      (pct >= 0.67) { nivelFinal = 'Riesgo Alto';  semClass = 'alto';  semIcon = '🔴'; }
+  else if (pct >= 0.34) { nivelFinal = 'Riesgo Medio'; semClass = 'medio'; semIcon = '🟡'; }
+  else                  { nivelFinal = 'Riesgo Bajo';  semClass = 'bajo';  semIcon = '🟢'; }
+
+  // Actualizar semáforo
+  const sem = document.getElementById('sem-icon');
+  sem.className = `semaforo ${semClass}`;
+  sem.textContent = semIcon;
+
+  document.getElementById('res-nivel').textContent = nivelFinal;
+  document.getElementById('res-nivel').style.color =
+    semClass === 'bajo' ? '#15803d' :
+    semClass === 'medio' ? '#92400e' :
+    semClass === 'alto' ? '#991b1b' : '#475569';
+
+  document.getElementById('res-score').textContent =
+    `Puntaje: ${score} de ${maxScore} (${nVars} variable${nVars > 1 ? 's' : ''})`;
+
+  // Score bar
+  const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
+  const bar = document.getElementById('score-bar');
+  bar.style.width = pct + '%';
+  bar.style.background =
+    semClass === 'bajo'  ? '#22c55e' :
+    semClass === 'medio' ? '#f59e0b' : '#ef4444';
+  document.getElementById('score-num').textContent = maxScore > 0 ? `${score} / ${maxScore}` : '—';
+
+  // Tabla de variables
+  const grid = document.getElementById('vars-grid');
+  grid.innerHTML = '';
+
+  const vars = [
+    {
+      icon: '⛰️',
+      name: 'Movimiento de masas',
+      nivel: mmNivel,
+      pts: mmPts,
+      fuente: mmFuente,
+    },
+    {
+      icon: '🌊',
+      name: 'Inundaciones',
+      nivel: inundNivel,
+      pts: inundPts,
+      fuente: 'polígono',
+      disponible: true,   // capa cargada, puede ser sin dato
+    },
+    {
+      icon: '☀️',
+      name: 'Sequía',
+      nivel: seqNivel,
+      pts: seqPts,
+      fuente: 'climático',
+      disponible: true,   // capa SENAMHI cargada
+    },
+    {
+      icon: '❄️',
+      name: 'Heladas agrícolas',
+      nivel: null,
+      pts: null,
+      fuente: 'distrito*',
+      disponible: false,
+    },
+    {
+      icon: '🐄',
+      name: 'Heladas pecuarias',
+      nivel: null,
+      pts: null,
+      fuente: 'distrito*',
+      disponible: false,
+    },
+  ];
+
+  for (const v of vars) {
+    const row = document.createElement('div');
+    row.className = 'var-row';
+
+    let tagClass, tagText;
+    if (v.nivel) {
+      // Hay dato: colorear según nivel
+      tagClass = v.nivel === 'Muy alto' ? 'tag-muyalto' :
+                 v.nivel === 'Alto'     ? 'tag-alto' :
+                 v.nivel === 'Medio'    ? 'tag-medio' : 'tag-bajo';
+      tagText = v.nivel;
+    } else if (v.disponible) {
+      // Capa disponible pero zona sin cobertura
+      tagClass = 'tag-nodato';
+      tagText  = 'Sin dato';
+    } else {
+      // Variable aún no incorporada
+      tagClass = 'tag-nodato';
+      tagText  = 'Próximamente';
+    }
+
+    row.innerHTML = `
+      <div class="var-name">
+        <span class="icon">${v.icon}</span>
+        <span>${v.name}</span>
+        <span style="font-size:10px;color:#b0bec5;margin-left:2px">(${v.fuente})</span>
+      </div>
+      <span class="var-tag ${tagClass}">${tagText}</span>
+      <span class="var-pts">${v.pts !== null ? v.pts + 'pts' : ''}</span>
+    `;
+    grid.appendChild(row);
+  }
+
+  // Coordenadas
+  document.getElementById('coords-display').textContent =
+    `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+// ─── Enter en inputs ───────────────────────────────────────────────────────────
+['lat','lng'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') evaluarCoordenadas();
+  });
+});
+</script>
+</body>
+</html>
