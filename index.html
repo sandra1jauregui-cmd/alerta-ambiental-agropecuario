@@ -469,11 +469,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const INUND_URL     = 'data/inund_web.geojson';
-const MM_URL        = 'data/mm_web.geojson';
-const OFICINAS_URL  = 'data/oficinas.geojson';
-const DISTRITOS_URL = 'data/distritos_riesgo.geojson';
-const SEQUIA_URL    = 'data/sequia_web.geojson';
+const INUND_URL     = 'data/inund_web.geojson.gz';
+const MM_URL        = 'data/mm_web.geojson.gz';
+const OFICINAS_URL  = 'data/oficinas.geojson.gz';
+const DISTRITOS_URL = 'data/distritos_riesgo.geojson.gz';
+const SEQUIA_URL    = 'data/sequia_web.geojson.gz';
 
 // Colores por nivel
 const COLOR = {
@@ -526,9 +526,40 @@ function styleDistritoHover(feature) {
   return { weight: 1.5, color: '#1a3a5c', fillOpacity: 0.75 };
 }
 
+// ─── FETCH CON DESCOMPRESIÓN GZIP ───────────────────────────────────────────
+// Compatible con GitHub Pages (no sirve Content-Encoding:gzip automáticamente)
+async function fetchGzip(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  // Si el servidor ya descomprime (Content-Encoding:gzip), usar directo
+  const encoding = res.headers.get('Content-Encoding');
+  if (encoding === 'gzip' || !url.endsWith('.gz')) {
+    return res.json();
+  }
+  // Descomprimir manualmente con DecompressionStream
+  const blob = await res.blob();
+  const ds = new DecompressionStream('gzip');
+  const stream = blob.stream().pipeThrough(ds);
+  const reader = stream.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const text = new TextDecoder().decode(
+    chunks.reduce((acc, chunk) => {
+      const merged = new Uint8Array(acc.length + chunk.length);
+      merged.set(acc); merged.set(chunk, acc.length);
+      return merged;
+    }, new Uint8Array(0))
+  );
+  return JSON.parse(text);
+}
+
 // Cargar capa corópleta de distritos
-fetch(DISTRITOS_URL)
-  .then(r => r.json())
+fetchGzip(DISTRITOS_URL)
+  .then(data => data)
   .then(data => {
     distritosLayer = L.geoJSON(data, {
       style: styleDistrito,
@@ -588,7 +619,7 @@ function styleMM(feature) {
 
 // Inundaciones: también diferida (0.6s tras inicio)
 setTimeout(() => {
-  fetch(INUND_URL)
+  fetchGzip(INUND_URL)
     .then(r => r.json())
     .then(data => {
       inundData = data;
@@ -605,7 +636,7 @@ setTimeout(() => {
 }, 600);
 
 // Cargar oficinas
-fetch(OFICINAS_URL)
+fetchGzip(OFICINAS_URL)
   .then(r => r.json())
   .then(data => {
     oficinasLayer = L.geoJSON(data, {
@@ -656,7 +687,7 @@ fetch(OFICINAS_URL)
 // MM y Sequía: cargar en diferido después de que el mapa esté visible
 function cargarCapasDetalle() {
   // MM
-  fetch(MM_URL)
+  fetchGzip(MM_URL)
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       mmData = data;
@@ -672,7 +703,7 @@ function cargarCapasDetalle() {
     .catch(() => { fase2Done(); });
 
   // Sequía
-  fetch(SEQUIA_URL)
+  fetchGzip(SEQUIA_URL)
     .then(r => r.json())
     .then(data => {
       sequiaData = data;
