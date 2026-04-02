@@ -476,7 +476,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CACHE_V       = 'v20260402f'; // incrementar para forzar recarga
+const CACHE_V       = 'v20260402g'; // incrementar para forzar recarga
 const INUND_URL     = `data/inund_web.geojson.gz?${CACHE_V}`;
 const MM_URL        = `data/mm_web.geojson.gz?${CACHE_V}`;
 const OFICINAS_URL  = `data/oficinas.geojson.gz?${CACHE_V}`;
@@ -540,8 +540,9 @@ async function fetchGzip(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   // Si el servidor ya descomprime (Content-Encoding:gzip), usar directo
+  // Nota: url puede tener query string como .gz?v20260402g — usar includes, no endsWith
   const encoding = res.headers.get('Content-Encoding');
-  if (encoding === 'gzip' || !url.endsWith('.gz')) {
+  if (encoding === 'gzip' || !url.includes('.gz')) {
     return res.json();
   }
   // Descomprimir manualmente con DecompressionStream
