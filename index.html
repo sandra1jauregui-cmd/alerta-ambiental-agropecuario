@@ -710,15 +710,18 @@ function cargarCapasDetalle() {
   fetchGzip(SEQUIA_URL)
     .then(data => {
       sequiaData = data;
+      const colorSequia = n => n === 'Alto' ? '#ef4444' : n === 'Medio' ? '#f59e0b' : n === 'Bajo' ? '#22c55e' : '#94a3b8';
       sequiaLayer = L.geoJSON(data, {
         style: feat => ({
-          fillColor: feat.properties.color_sq || '#94a3b8',
-          weight: 0.3, opacity: 0.5, color: '#fff', fillOpacity: 0.5,
+          fillColor: colorSequia(feat.properties.nivel_sq || feat.properties.seq_pp),
+          weight: 0.3, opacity: 0.5, color: '#fff', fillOpacity: 0.6,
         }),
         onEachFeature: (feat, layer) => {
           const p = feat.properties;
+          const nivel = p.nivel_sq || p.seq_pp || 'Sin dato';
+          const dist  = p.NOMBDIST ? `${p.NOMBDIST} · ` : '';
           layer.bindTooltip(
-            `<b>Sequía:</b> ${p.nivel_sq} <span style="color:#888">(${p.codigo})</span>`,
+            `<div style="font-family:Inter,sans-serif;font-size:12px"><b>Sequía:</b> ${nivel}<br><span style="color:#888">${dist}${p.NOMBDEP || ''}</span></div>`,
             { className: 'map-tooltip', sticky: true }
           );
         }
