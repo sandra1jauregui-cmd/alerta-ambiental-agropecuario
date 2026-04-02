@@ -564,8 +564,10 @@ async function fetchGzip(url) {
 }
 
 // Cargar capa corópleta de distritos
+let distritosData = null;
 fetchGzip(DISTRITOS_URL)
   .then(data => {
+    distritosData = data;  // guardar para consulta de sequía
     distritosLayer = L.geoJSON(data, {
       style: styleDistrito,
       onEachFeature: (feat, layer) => {
@@ -827,7 +829,8 @@ function evaluarPunto(lat, lng) {
 
   const resultInund  = queryLayer(inundData,  pt, 'n_inund', 'v_inund');
   const resultMM     = mmData     ? queryLayer(mmData,     pt, 'N_SMMPP', 'V_SMMPP')  : null;
-  const resultSequia = sequiaData ? queryLayer(sequiaData, pt, 'nivel_sq', 'pts_sq')  : null;
+  // Sequía: leer desde distritos (seq_pp / pts_sq), con fallback al más cercano
+  const resultSequia = distritosData ? queryDistritoSequia(distritosData, pt) : null;
 
   // Opción 2: sin cobertura CENEPRED MM → Bajo
   const mmNivel    = resultMM    ? resultMM.nivel    : 'Bajo';
@@ -868,6 +871,52 @@ function pointInPolygonRings(point, rings) {
     if (pointInRing(point, rings[h])) return false; // inside a hole
   }
   return true;
+}
+
+// Consulta sequía desde capa de distritos, con fallback al más cercano
+// (necesario para puntos en lagos, costas, zonas fronterizas)
+function queryDistritoSequia(geojsonData, point) {
+  if (!geojsonData) return null;
+  const [px, py] = point;
+
+  // Paso 1: buscar distrito que contiene el punto
+  for (const feat of geojsonData.features) {
+    const geom = feat.geometry;
+    if (!geom) continue;
+    let hit = false;
+    if (geom.type === 'Polygon')      hit = pointInPolygonRings(point, geom.coordinates);
+    else if (geom.type === 'MultiPolygon') {
+      for (const poly of geom.coordinates) { if (pointInPolygonRings(point, poly)) { hit = true; break; } }
+    }
+    if (hit) {
+      const p = feat.properties;
+      const nivel = p.seq_pp || 'Sin dato';
+      const pts   = p.pts_sq != null ? p.pts_sq : (nivel === 'Alto' ? 3 : nivel === 'Medio' ? 2 : nivel === 'Bajo' ? 1 : 0);
+      return { nivel, valor: pts };
+    }
+  }
+
+  // Paso 2: fallback — distrito más cercano (punto en lago, mar, frontera)
+  let bestDist = Infinity;
+  let bestFeat = null;
+  for (const feat of geojsonData.features) {
+    const geom = feat.geometry;
+    if (!geom) continue;
+    // Approximate distance to first ring of first polygon
+    const rings = geom.type === 'Polygon' ? geom.coordinates : geom.coordinates[0];
+    const ring  = rings[0];
+    for (const [rx, ry] of ring) {
+      const d = (px - rx) ** 2 + (py - ry) ** 2;
+      if (d < bestDist) { bestDist = d; bestFeat = feat; }
+    }
+  }
+  if (bestFeat && bestDist < 0.25) {  // solo si está a <0.5° (~55km)
+    const p = bestFeat.properties;
+    const nivel = p.seq_pp || 'Sin dato';
+    const pts   = p.pts_sq != null ? p.pts_sq : (nivel === 'Alto' ? 3 : nivel === 'Medio' ? 2 : nivel === 'Bajo' ? 1 : 0);
+    return { nivel, valor: pts };
+  }
+  return null;
 }
 
 function queryLayer(geojsonData, point, nivelField, valorField) {
