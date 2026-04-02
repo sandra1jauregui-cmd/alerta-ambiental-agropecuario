@@ -476,7 +476,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CACHE_V       = 'v20260402g'; // incrementar para forzar recarga
+const CACHE_V       = 'v20260402h'; // incrementar para forzar recarga
 const INUND_URL     = `data/inund_web.geojson.gz?${CACHE_V}`;
 const MM_URL        = `data/mm_web.geojson.gz?${CACHE_V}`;
 const OFICINAS_URL  = `data/oficinas.geojson.gz?${CACHE_V}`;
@@ -535,35 +535,41 @@ function styleDistritoHover(feature) {
 }
 
 // ─── FETCH CON DESCOMPRESIÓN GZIP ───────────────────────────────────────────
-// Compatible con GitHub Pages (no sirve Content-Encoding:gzip automáticamente)
+// Detecta si la respuesta es gzip por magic number (1F 8B), no por headers.
+// Esto es robusto frente a Service Workers y proxies que eliminan headers.
 async function fetchGzip(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-store' }); // siempre ir a red para datos
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  // Si el servidor ya descomprime (Content-Encoding:gzip), usar directo
-  // Nota: url puede tener query string como .gz?v20260402g — usar includes, no endsWith
-  const encoding = res.headers.get('Content-Encoding');
-  if (encoding === 'gzip' || !url.includes('.gz')) {
-    return res.json();
+
+  const arrayBuffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+
+  // Detectar magic number gzip: 0x1F 0x8B
+  const isGzip = bytes[0] === 0x1F && bytes[1] === 0x8B;
+
+  if (!isGzip) {
+    // Ya está descomprimido (JSON plano)
+    return JSON.parse(new TextDecoder().decode(bytes));
   }
-  // Descomprimir manualmente con DecompressionStream
-  const blob = await res.blob();
+
+  // Descomprimir con DecompressionStream
   const ds = new DecompressionStream('gzip');
-  const stream = blob.stream().pipeThrough(ds);
-  const reader = stream.getReader();
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  writer.write(bytes);
+  writer.close();
+
   const chunks = [];
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
   }
-  const text = new TextDecoder().decode(
-    chunks.reduce((acc, chunk) => {
-      const merged = new Uint8Array(acc.length + chunk.length);
-      merged.set(acc); merged.set(chunk, acc.length);
-      return merged;
-    }, new Uint8Array(0))
-  );
-  return JSON.parse(text);
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+  return JSON.parse(new TextDecoder().decode(merged));
 }
 
 // Cargar capa corópleta de distritos
