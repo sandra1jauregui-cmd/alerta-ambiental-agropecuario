@@ -475,7 +475,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CACHE_V       = 'v20260402c'; // incrementar para forzar recarga
+const CACHE_V       = 'v20260402d'; // incrementar para forzar recarga
 const INUND_URL     = `data/inund_web.geojson.gz?${CACHE_V}`;
 const MM_URL        = `data/mm_web.geojson.gz?${CACHE_V}`;
 const OFICINAS_URL  = `data/oficinas.geojson.gz?${CACHE_V}`;
@@ -764,12 +764,15 @@ function fase2Done() {
   // Una capa detallada cargada (inund / MM / sequía)
   fase2Count++;
   
-  // Reordenar capas cada vez que llega una nueva
-  if (distritosLayer) { distritosLayer.remove(); distritosLayer.addTo(map); }
-  if (sequiaLayer)    { sequiaLayer.remove();    sequiaLayer.addTo(map); }
-  if (inundLayer)     { inundLayer.remove();     inundLayer.addTo(map); }
-  if (mmLayer)        { mmLayer.remove();        mmLayer.addTo(map); }
-  if (oficinasLayer)  { oficinasLayer.remove();  oficinasLayer.addTo(map); }
+  // Reordenar SOLO las capas que ya están activas en el mapa
+  // (no forzar capas que el usuario desactivó)
+  const capasOrdenadas = [distritosLayer, sequiaLayer, inundLayer, mmLayer, oficinasLayer];
+  capasOrdenadas.forEach(layer => {
+    if (layer && map.hasLayer(layer)) {
+      layer.remove();
+      layer.addTo(map);
+    }
+  });
   
   actualizarControlCapas();
 }
@@ -789,6 +792,35 @@ function actualizarControlCapas() {
     layersControl = L.control.layers(null, overlays, { collapsed: false }).addTo(map);
   }
 }
+
+// Eventos de capa registrados UNA sola vez al iniciar el mapa
+// Al activar una capa de detalle: ocultar distritosLayer para que no tape
+map.on('overlayadd', function(e) {
+  const DETALLE = ['☀️ Sequía (climático)', '🌊 Inundaciones (polígono)', '⛰️ Mov. de masas (polígono)'];
+  if (DETALLE.includes(e.name)) {
+    if (distritosLayer && map.hasLayer(distritosLayer)) distritosLayer.remove();
+    // Reordenar capas activas: sequía abajo, luego inund, mm, oficinas
+    [sequiaLayer, inundLayer, mmLayer, oficinasLayer].forEach(l => {
+      if (l && map.hasLayer(l)) { l.remove(); l.addTo(map); }
+    });
+  }
+});
+
+// Al desactivar todas las capas de detalle: restaurar distritosLayer
+map.on('overlayremove', function(e) {
+  const DETALLE = ['☀️ Sequía (climático)', '🌊 Inundaciones (polígono)', '⛰️ Mov. de masas (polígono)'];
+  if (DETALLE.includes(e.name)) {
+    const hayDetalle = (sequiaLayer && map.hasLayer(sequiaLayer)) ||
+                       (inundLayer  && map.hasLayer(inundLayer))  ||
+                       (mmLayer     && map.hasLayer(mmLayer));
+    if (!hayDetalle && distritosLayer && !map.hasLayer(distritosLayer)) {
+      distritosLayer.addTo(map);
+      if (oficinasLayer && map.hasLayer(oficinasLayer)) {
+        oficinasLayer.remove(); oficinasLayer.addTo(map);
+      }
+    }
+  }
+});
 
 // Alias para compatibilidad
 function checkAllLoaded() { fase1Done(); }

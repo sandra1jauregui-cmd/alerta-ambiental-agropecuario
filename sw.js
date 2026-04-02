@@ -1,6 +1,6 @@
 // Service Worker — Alerta Ambiental Agropecuario
 // Versión del cache: incrementar para forzar actualización
-const CACHE_NAME = 'alerta-agro-v5';  // incrementar al actualizar datos
+const CACHE_NAME = 'alerta-agro-v6';  // incrementar al actualizar datos
 
 const ASSETS = [
   './',
