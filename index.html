@@ -433,7 +433,7 @@
 
       <div style="padding:14px 18px 4px">
         <div class="nota">
-          <p><strong>Nota metodológica:</strong> El puntaje combina MM (huaycos), inundaciones y sequía a nivel polígono. Sequía según frecuencia de déficit hídrico CHIRPS 2022–2024 vs. referencia 2016–2020, con umbrales ajustados por altitud: altiplano/puna (>3000 m): Alto si >25% meses en déficit, Medio si ≥15%; sierra (1500–3000 m): Alto si >30%, Medio si ≥18%; costa/selva baja (<1500 m): Alto si >40%, Medio si ≥25%. Heladas agrícolas y pecuarias se incorporarán próximamente.</p>
+          <p><strong>Nota metodológica:</strong> El puntaje pondera las variables según la resolución de la fuente. <strong>Variables a nivel polígono CENEPRED (peso doble):</strong> Movimiento de masas e Inundaciones — mayor precisión espacial, máx. 6 pts c/u. <strong>Variable a nivel distrito CHIRPS (peso simple):</strong> Sequía — máx. 3 pts. Total posible: 15 pts con las 3 variables. Clasificación: ≥67% del máximo = Riesgo Alto, ≥34% = Riesgo Medio, &lt;34% = Riesgo Bajo. Sequía calculada con CHIRPS 2022–2024 vs. referencia 2016–2020, umbrales ajustados por altitud: altiplano/puna (&gt;3000 m) Alto &gt;25% meses en déficit; sierra (1500–3000 m) Alto &gt;30%; costa/selva (&lt;1500 m) Alto &gt;40%. Heladas agrícolas y pecuarias se incorporarán próximamente.</p>
         </div>
       </div>
 
@@ -449,9 +449,10 @@
     <div class="sidebar-section" style="margin-top:auto">
       <h3>Leyenda</h3>
       <div class="leyenda">
-        <div class="leyenda-item"><div class="dot bajo"></div> Riesgo Bajo (&lt;34% del máx)</div>
+        <div class="leyenda-item"><div class="dot bajo"></div> Riesgo Bajo (&lt;34% del máx ponderado)</div>
         <div class="leyenda-item"><div class="dot medio"></div> Riesgo Medio (34–66%)</div>
-        <div class="leyenda-item"><div class="dot alto"></div> Riesgo Alto (&ge;67%)</div>
+        <div class="leyenda-item"><div class="dot alto"></div> Riesgo Alto (≥67%)</div>
+        <div style="font-size:10px;color:#b0bec5;margin-top:6px;line-height:1.4">MM e Inundaciones (polígono): peso ×2<br>Sequía (distrito CHIRPS): peso ×1</div>
       </div>
       <div style="font-size:11px; color:#9aabb8; margin-top:8px; line-height:1.5">
         Fuentes: CENEPRED · INEI · SENAMHI<br>
@@ -475,7 +476,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CACHE_V       = 'v20260402e'; // incrementar para forzar recarga
+const CACHE_V       = 'v20260402f'; // incrementar para forzar recarga
 const INUND_URL     = `data/inund_web.geojson.gz?${CACHE_V}`;
 const MM_URL        = `data/mm_web.geojson.gz?${CACHE_V}`;
 const OFICINAS_URL  = `data/oficinas.geojson.gz?${CACHE_V}`;
@@ -983,40 +984,52 @@ function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundV
   const res = document.getElementById('resultado');
   res.classList.add('visible');
 
-  // Normalizar valores al esquema 1-3 del modelo
-  // MM:    V_SMMPP  3=Alto→3pts, 4=Muy alto→3pts
-  // Inund: v_inund  2=Medio→2pts, 3=Alto→3pts
-  // Sequía: pts_sq ya viene 1/2/3 directo (no pasa por normalizar)
-  function normalizar(val) {
-    if (!val || val <= 0) return 1; // sin dato → Bajo
-    if (val >= 3) return 3;        // Alto / Muy alto
-    if (val >= 2) return 2;        // Medio
-    return 1;                      // Bajo
+  // ── Puntaje ponderado por calidad de fuente ─────────────────────────────
+  // Variables polígono CENEPRED (alta resolución): peso 2×
+  //   MM:          Bajo=1→2pts, Medio=2→4pts, Alto/Muy alto=3→6pts  (siempre cuenta)
+  //   Inundaciones: ídem pero solo si hay cobertura (polígono disponible)
+  // Variable distrital CHIRPS (menor resolución): peso 1×
+  //   Sequía:       Bajo=1pt, Medio=2pts, Alto=3pts  (solo si hay dato)
+  // Máximo posible: MM(6) + Inund(6) + Seq(3) = 15 pts con las 3 variables
+
+  function normPts(val) {
+    // Convierte valor numérico CENEPRED → escala 1-3
+    if (!val || val <= 0) return 1;
+    if (val >= 3) return 3;
+    if (val >= 2) return 2;
+    return 1;
   }
 
-  // MM: sin cobertura CENEPRED = Bajo (opción 2)
-  const mmPts    = normalizar(mmVal);
+  // MM (polígono): sin cobertura CENEPRED = Bajo = 1pt × peso 2 = 2pts
+  const mmBase  = normPts(mmVal);        // 1-3
+  const mmPts   = mmBase * 2;            // 2-6 (peso ×2)
+  const mmMax   = 3 * 2;                 // máx 6
 
-  // Inundaciones: sin cobertura = no suma
-  const inundPts = inundNivel ? normalizar(inundVal) : null;
+  // Inundaciones (polígono): sin cobertura = no suma
+  const inundBase = inundNivel ? normPts(inundVal) : null;
+  const inundPts  = inundBase !== null ? inundBase * 2 : null;  // 2-6 o null
+  const inundMax  = 3 * 2;              // máx 6
 
-  // Sequía: usa pts_sq directo (ya viene 1/2/3); sin cobertura o 'Sin riesgo' = no suma
-  const seqPts   = (seqNivel && seqNivel !== 'Sin riesgo') ? (seqVal || 0) : null;
+  // Sequía (distrito): sin dato = no suma; pts_sq ya viene 1/2/3
+  const seqBase = (seqNivel && seqNivel !== 'Sin riesgo' && seqNivel !== 'Sin dato')
+                    ? (seqVal || 0) : null;
+  const seqPts  = seqBase;              // 1-3 o null (peso ×1, sin cambio)
+  const seqMax  = 3;                    // máx 3
 
   // Cuántas variables tienen dato
   const nVars = 1
     + (inundPts !== null ? 1 : 0)
     + (seqPts   !== null ? 1 : 0);
 
-  // Score y máximo
+  // Score y máximo ponderados
   let score    = mmPts
     + (inundPts !== null ? inundPts : 0)
     + (seqPts   !== null ? seqPts   : 0);
-  let maxScore = 3
-    + (inundPts !== null ? 3 : 0)
-    + (seqPts   !== null ? 3 : 0);
+  let maxScore = mmMax
+    + (inundPts !== null ? inundMax : 0)
+    + (seqPts   !== null ? seqMax   : 0);
 
-  // Clasificación — umbrales proporcionales al 33%/67% del máximo
+  // Clasificación proporcional: ≥67% = Alto, ≥34% = Medio, <34% = Bajo
   let nivelFinal, semClass, semIcon;
   const pct = score / maxScore;
   if      (pct >= 0.67) { nivelFinal = 'Riesgo Alto';  semClass = 'alto';  semIcon = '🔴'; }
@@ -1034,8 +1047,10 @@ function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundV
     semClass === 'medio' ? '#92400e' :
     semClass === 'alto' ? '#991b1b' : '#475569';
 
+  // Mostrar puntaje ponderado con detalle
+  const pctPct = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
   document.getElementById('res-score').textContent =
-    `Puntaje: ${score} de ${maxScore} (${nVars} variable${nVars > 1 ? 's' : ''})`;
+    `Puntaje: ${score} / ${maxScore} pts (${pctPct}%) · ${nVars} variable${nVars > 1 ? 's' : ''}`;
 
   // Score bar
   const pctBar = maxScore > 0 ? (score / maxScore) * 100 : 0;
@@ -1056,23 +1071,29 @@ function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundV
       name: 'Movimiento de masas',
       nivel: mmNivel,
       pts: mmPts,
+      maxPts: mmMax,
       fuente: mmFuente,
+      peso: '×2 polígono',
     },
     {
       icon: '🌊',
       name: 'Inundaciones',
       nivel: inundNivel,
       pts: inundPts,
+      maxPts: inundMax,
       fuente: 'polígono',
-      disponible: true,   // capa cargada, puede ser sin dato
+      peso: '×2 polígono',
+      disponible: true,
     },
     {
       icon: '☀️',
       name: 'Sequía',
       nivel: seqNivel,
       pts: seqPts,
-      fuente: 'climático',
-      disponible: true,   // capa SENAMHI cargada
+      maxPts: seqMax,
+      fuente: 'distrito CHIRPS',
+      peso: '×1 distrito',
+      disponible: true,
     },
     {
       icon: '❄️',
@@ -1113,14 +1134,19 @@ function mostrarResultado(lat, lng, mmNivel, mmVal, mmFuente, inundNivel, inundV
       tagText  = 'Próximamente';
     }
 
+    // Mostrar pts ponderados: ej. "4/6 pts" o vacío si sin dato
+    const ptsDisplay = (v.pts !== null && v.maxPts)
+      ? `${v.pts}/${v.maxPts}`
+      : (v.pts !== null ? `${v.pts}` : '');
+
     row.innerHTML = `
       <div class="var-name">
         <span class="icon">${v.icon}</span>
         <span>${v.name}</span>
-        <span style="font-size:10px;color:#b0bec5;margin-left:2px">(${v.fuente})</span>
+        <span style="font-size:10px;color:#b0bec5;margin-left:2px">(${v.peso || v.fuente})</span>
       </div>
       <span class="var-tag ${tagClass}">${tagText}</span>
-      <span class="var-pts">${v.pts !== null ? v.pts + 'pts' : ''}</span>
+      <span class="var-pts">${ptsDisplay ? ptsDisplay + ' pts' : ''}</span>
     `;
     grid.appendChild(row);
   }
