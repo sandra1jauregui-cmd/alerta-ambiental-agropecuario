@@ -475,7 +475,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const CACHE_V       = 'v20260402d'; // incrementar para forzar recarga
+const CACHE_V       = 'v20260402e'; // incrementar para forzar recarga
 const INUND_URL     = `data/inund_web.geojson.gz?${CACHE_V}`;
 const MM_URL        = `data/mm_web.geojson.gz?${CACHE_V}`;
 const OFICINAS_URL  = `data/oficinas.geojson.gz?${CACHE_V}`;
@@ -636,7 +636,7 @@ setTimeout(() => {
           const nivel = feat.properties.n_inund || feat.properties.N_SInunPP;
           layer.bindTooltip(`<b>Inundaciones:</b> ${nivel}`, { className: 'map-tooltip', sticky: true });
         }
-      }).addTo(map);
+      }); // NO .addTo(map) — se añade al activar en control
       fase2Done();
     })
     .catch(e => { console.warn('Inundaciones no cargadas:', e); fase2Done(); });
@@ -744,54 +744,50 @@ let layersControlAdded = false;
 let layersControl = null;
 
 function fase1Done() {
-  // Oficinas o distritos cargados
   fase1Count++;
   if (fase1Count >= 2) {
-    // Mostrar mapa inmediatamente
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('loading-msg').textContent = 'Cargando capas de riesgo...';
-    
-    // Ordenar capas
-    if (distritosLayer) { distritosLayer.remove(); distritosLayer.addTo(map); }
-    if (oficinasLayer)  { oficinasLayer.remove();  oficinasLayer.addTo(map); }
-    
-    // Crear control de capas con lo que hay
-    actualizarControlCapas();
+    // Agregar capas al mapa
+    if (distritosLayer) distritosLayer.addTo(map);
+    if (oficinasLayer)  oficinasLayer.addTo(map);
+    // Crear el control una sola vez
+    if (!layersControl) {
+      layersControl = L.control.layers(null, {}, { collapsed: false }).addTo(map);
+    }
+    if (distritosLayer) layersControl.addOverlay(distritosLayer, '🗺️ Riesgo por distrito');
+    if (oficinasLayer)  layersControl.addOverlay(oficinasLayer,  '🏢 Oficinas');
+    // Si capas de detalle ya cargaron antes que fase1, registrarlas ahora
+    registrarCapasDetalle();
+  }
+}
+
+// Flags para no agregar la misma capa dos veces al control
+let sequiaEnControl = false, inundEnControl = false, mmEnControl = false;
+
+function registrarCapasDetalle() {
+  // Agregar capas de detalle al control cuando éste ya existe
+  if (!layersControl) return; // se intentará de nuevo desde fase1Done
+  if (sequiaLayer && !sequiaEnControl) {
+    layersControl.addOverlay(sequiaLayer, '☀️ Sequía (climático)');
+    sequiaEnControl = true;
+  }
+  if (inundLayer && !inundEnControl) {
+    layersControl.addOverlay(inundLayer, '🌊 Inundaciones (polígono)');
+    inundEnControl = true;
+  }
+  if (mmLayer && !mmEnControl) {
+    layersControl.addOverlay(mmLayer, '⛰️ Mov. de masas (polígono)');
+    mmEnControl = true;
   }
 }
 
 function fase2Done() {
-  // Una capa detallada cargada (inund / MM / sequía)
   fase2Count++;
-  
-  // Reordenar SOLO las capas que ya están activas en el mapa
-  // (no forzar capas que el usuario desactivó)
-  const capasOrdenadas = [distritosLayer, sequiaLayer, inundLayer, mmLayer, oficinasLayer];
-  capasOrdenadas.forEach(layer => {
-    if (layer && map.hasLayer(layer)) {
-      layer.remove();
-      layer.addTo(map);
-    }
-  });
-  
-  actualizarControlCapas();
+  registrarCapasDetalle();
 }
 
-function actualizarControlCapas() {
-  // Quitar control anterior si existe
-  if (layersControl) { layersControl.remove(); layersControl = null; }
-  
-  const overlays = {};
-  if (distritosLayer) overlays['🗺️ Riesgo por distrito']     = distritosLayer;
-  if (sequiaLayer)    overlays['☀️ Sequía (climático)']       = sequiaLayer;
-  if (inundLayer)     overlays['🌊 Inundaciones (polígono)']  = inundLayer;
-  if (mmLayer)        overlays['⛰️ Mov. de masas (polígono)'] = mmLayer;
-  if (oficinasLayer)  overlays['🏢 Oficinas']                  = oficinasLayer;
-  
-  if (Object.keys(overlays).length > 0) {
-    layersControl = L.control.layers(null, overlays, { collapsed: false }).addTo(map);
-  }
-}
+function actualizarControlCapas() { /* legacy — ya no recrea el control */ }
 
 // Eventos de capa registrados UNA sola vez al iniciar el mapa
 // Al activar una capa de detalle: ocultar distritosLayer para que no tape
